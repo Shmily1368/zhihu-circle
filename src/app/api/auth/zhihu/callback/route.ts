@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
-    const code = searchParams.get('code');
+    // 知乎黑客松接口比较特殊，有时返回 code，有时返回 authorization_code
+    const code = searchParams.get('code') || searchParams.get('authorization_code');
 
     if (!code) {
         // 打印所有的参数，方便排查知乎到底传了什么回来
