@@ -234,7 +234,7 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
 
   }, [data, onNodeClick]);
 
-  return <div ref={chartRef} className="w-full h-[800px] border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden" />;
+  return <div ref={chartRef} className="w-full h-[80vh] min-h-[800px] border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden" />;
 });
 
 export default CircleGraph;

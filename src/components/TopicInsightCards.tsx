@@ -15,7 +15,7 @@ export default function TopicInsightCards({ data, llmInsight }: { data: ZhihuCir
                         <Sparkles className="text-indigo-600" /> AI 全局洞察
                     </h3>
                     <p className="text-indigo-800 font-medium mb-3">{llmInsight.summary}</p>
-                    <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex flex-col gap-4">
                         <div className="flex-1 bg-white p-4 rounded-xl border border-indigo-100">
                             <p className="text-xs text-indigo-500 font-bold mb-2">主要话题</p>
                             <div className="flex flex-wrap gap-2">
@@ -35,7 +35,7 @@ export default function TopicInsightCards({ data, llmInsight }: { data: ZhihuCir
                 </div>
             )}
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 border border-slate-200 rounded-2xl bg-white shadow-sm flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-blue-50 text-zhihu-blue flex items-center justify-center">
                         <Eye size={24} />

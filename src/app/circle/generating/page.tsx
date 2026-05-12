@@ -105,7 +105,7 @@ export default function GeneratingPage() {
       rawDataRef.current.moments,
       configRef.current
     );
-    
+
     // 后台并发预加载所有用户的头像
     targetDataRef.current.users.forEach(u => {
       if (u.avatar_path && !loadingImagesRef.current.has(u.avatar_path)) {
@@ -117,16 +117,16 @@ export default function GeneratingPage() {
   // 动画循环：平滑地将目标数据一个一个展示到图谱上
   const startAnimationLoop = () => {
     if (animationIntervalRef.current) clearInterval(animationIntervalRef.current);
-    
+
     animationIntervalRef.current = setInterval(() => {
       if (!targetDataRef.current) return;
-      
+
       const targetUsers = targetDataRef.current.users;
       const currentDisplayed = displayedUsersRef.current;
-      
+
       let changed = false;
       const newDisplayed = [...currentDisplayed];
-      
+
       // 1. 移除不在 target 中的用户
       const targetUids = new Set(targetUsers.map(u => u.uid));
       for (let i = newDisplayed.length - 1; i >= 0; i--) {
@@ -135,7 +135,7 @@ export default function GeneratingPage() {
           changed = true;
         }
       }
-      
+
       // 2. 更新已存在用户的分数（仅更新分数，不直接更新圈层，圈层由当前屏幕人数动态决定）
       for (let i = 0; i < newDisplayed.length; i++) {
         const t = targetUsers.find(u => u.uid === newDisplayed[i].uid);
@@ -144,32 +144,32 @@ export default function GeneratingPage() {
           changed = true;
         }
       }
-      
+
       // 3. 每次 tick 严格只添加 1 个新用户，保证视觉上“一个一个飞入”
       const displayedUids = new Set(newDisplayed.map(u => u.uid));
       const missing = targetUsers.filter(u => !displayedUids.has(u.uid));
-      
+
       if (missing.length > 0) {
         // 严格 1 个 1 个加，保持绝对的流畅和秩序
         newDisplayed.push({ ...missing[0] });
         changed = true;
       }
-      
+
       // 4. 核心修复：根据当前屏幕上的这批人，重新动态分配座位（圈层）
       // 这样新进来的高分用户才会一级一级把别人挤出去，而不是背景数据一变，屏幕上的人瞬间大洗牌
       // 即使 changed 为 false，如果 config 参数变了，我们也需要强制重排座位
       newDisplayed.sort((a, b) => b.score - a.score);
-      
+
       let currentCircle = 1;
       let currentCount = 0;
       let currentCapacity = configRef.current.innerCircleSize;
-      
+
       if (configRef.current.innerCircleSize > 0) {
         for (const u of newDisplayed) {
           if (currentCircle > configRef.current.circleCount) break; // 超过最大圈层的直接丢弃
-          
+
           if (u.circle !== currentCircle) {
-            u.circle = currentCircle as 1|2|3; // 保持与类型定义一致
+            u.circle = currentCircle as 1 | 2 | 3; // 保持与类型定义一致
             changed = true; // 发现座位不匹配，标记有变动
           }
           currentCount++;
@@ -180,35 +180,35 @@ export default function GeneratingPage() {
           }
         }
       }
-      
+
       // 5. 检查图片加载进度是否有变化
       let imageStateChanged = false;
       if (fullyLoadedImagesRef.current.size !== lastLoadedCountRef.current) {
         imageStateChanged = true;
         lastLoadedCountRef.current = fullyLoadedImagesRef.current.size;
       }
-      
+
       if (changed || imageStateChanged) {
         displayedUsersRef.current = newDisplayed;
-        
+
         // 构造展示用的 circles 对象
         const newCircles: Record<string, CircleUser[]> = {};
         for (let i = 1; i <= configRef.current.circleCount; i++) {
           newCircles[`circle${i}`] = [];
         }
-        
+
         newDisplayed.forEach(u => {
           const circleKey = `circle${u.circle}`;
           if (newCircles[circleKey]) {
             newCircles[circleKey].push({
-               ...u,
-               avatar_path: (!u.avatar_path || fullyLoadedImagesRef.current.has(u.avatar_path)) ? u.avatar_path : undefined
+              ...u,
+              avatar_path: (!u.avatar_path || fullyLoadedImagesRef.current.has(u.avatar_path)) ? u.avatar_path : undefined
             });
           }
         });
-        
+
         const centerLoaded = !targetDataRef.current.center.avatar_path || fullyLoadedImagesRef.current.has(targetDataRef.current.center.avatar_path);
-        
+
         setResultData({
           ...targetDataRef.current,
           center: {
@@ -234,7 +234,7 @@ export default function GeneratingPage() {
   useEffect(() => {
     if (step >= GENERATE_STEPS.length - 1 && !isGenerating) {
       computeTargetData();
-      
+
       // 因为 config 改变导致 target 变化，重新启动动画循环以应用新的排座
       startAnimationLoop();
     }
@@ -242,14 +242,14 @@ export default function GeneratingPage() {
 
   const startGeneration = async () => {
     if (isFetchingRef.current) return;
-    
+
     setIsGenerating(true);
     setError(null);
     setRequireAuth(false);
-    
+
     isFetchingRef.current = true;
     displayedUsersRef.current = [];
-    
+
     // 清空现有数据（保留 me 避免闪烁）
     rawDataRef.current.followed = [];
     rawDataRef.current.followers = [];
@@ -259,15 +259,15 @@ export default function GeneratingPage() {
       setStep(1); // 正在获取资料
       const meData = await fetchProxy('/user');
       const sanitizedMe = sanitizeUser(meData);
-      
+
       // 在显示中心点之前，先预加载中心点的头像（不阻塞）
       if (sanitizedMe.avatar_path) {
         preloadImage(sanitizedMe.avatar_path);
       }
-      
+
       rawDataRef.current.me = sanitizedMe;
       computeTargetData();
-      
+
       // 立即给 resultData 赋一个只有中心点的初始值，让图谱立马显示出来，消灭“准备渲染宇宙...”
       const centerLoaded = !sanitizedMe.avatar_path || fullyLoadedImagesRef.current.has(sanitizedMe.avatar_path);
       setResultData({
@@ -279,7 +279,7 @@ export default function GeneratingPage() {
         users: [],
         circles: { circle1: [], circle2: [], circle3: [], circle4: [], circle5: [] }
       });
-      
+
       // 稍微等一下让图谱实例初始化完毕，再开始动画循环
       setTimeout(startAnimationLoop, 300);
 
@@ -306,7 +306,7 @@ export default function GeneratingPage() {
           computeTargetData(); // 每次 chunk 抓取完更新一次目标，动画会自动追赶
           if (emptyCount > 0) break;
         }
-        
+
         // 最后精确裁剪到用户设定的上限人数
         if (rawDataRef.current.followed.length > config.followedPages) {
           rawDataRef.current.followed = rawDataRef.current.followed.slice(0, config.followedPages);
@@ -334,7 +334,7 @@ export default function GeneratingPage() {
           computeTargetData();
           if (emptyCount > 0) break;
         }
-        
+
         // 最后精确裁剪到用户设定的上限人数
         if (rawDataRef.current.followers.length > config.followersPages) {
           rawDataRef.current.followers = rawDataRef.current.followers.slice(0, config.followersPages);
@@ -357,10 +357,10 @@ export default function GeneratingPage() {
           rawDataRef.current.moments.push(...items);
         }
       }
-      
+
       setStep(4); // 正在生成 Circle
       computeTargetData(); // 最终数据计算
-      
+
       setStep(GENERATE_STEPS.length - 1);
       setIsGenerating(false);
       isFetchingRef.current = false;
@@ -390,7 +390,7 @@ export default function GeneratingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-[1600px] mx-auto space-y-6">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">生成你的知乎信息宇宙</h1>
@@ -430,19 +430,20 @@ export default function GeneratingPage() {
           isGenerating={isGenerating}
         />
 
-        <TopicInsightCards data={resultData || { globalInsights: { totalFollowed: 0, totalFollowers: 0, mutualFollowCount: 0, totalMoments: 0, topActiveUsers: [] }, circles: { circle1: [], circle2: [], circle3: [] } } as any} llmInsight={llmData?.global_insight} />
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 relative">
+        <div className="flex flex-col xl:flex-row gap-6">
+          <div className="flex-1 relative">
             {resultData ? (
               <CircleGraph ref={graphRef} data={resultData} onNodeClick={setSelectedNode} />
             ) : (
-              <div className="w-full h-[800px] border border-slate-200 rounded-2xl bg-white shadow-sm flex items-center justify-center">
+              <div className="w-full h-[80vh] min-h-[800px] border border-slate-200 rounded-2xl bg-white shadow-sm flex items-center justify-center">
                 <div className="text-slate-400 font-medium">准备渲染宇宙...</div>
               </div>
             )}
           </div>
-          <div className="lg:col-span-1">
+
+          <div className="w-full xl:w-[400px] shrink-0 flex flex-col gap-6">
+            <TopicInsightCards data={resultData || { globalInsights: { totalFollowed: 0, totalFollowers: 0, mutualFollowCount: 0, totalMoments: 0, topActiveUsers: [] }, circles: { circle1: [], circle2: [], circle3: [] } } as any} llmInsight={llmData?.global_insight} />
+
             <UserInsightPanel
               user={selectedNode}
               llmInsight={

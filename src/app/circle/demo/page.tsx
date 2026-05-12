@@ -62,9 +62,9 @@ export default function DemoCirclePage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-            <div className="max-w-6xl mx-auto space-y-6">
-                <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+      <div className="max-w-[1600px] mx-auto space-y-6">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-900">ZhihuCircle 探索</h1>
                         <p className="text-slate-500 mt-1">你的知乎信息宇宙 (Demo 模式)</p>
@@ -72,13 +72,12 @@ export default function DemoCirclePage() {
                     <ShareCard onShare={handleOpenShare} />
                 </header>
 
-                <TopicInsightCards data={data} llmInsight={llmData?.global_insight} />
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2">
+                <div className="flex flex-col xl:flex-row gap-6">
+                    <div className="flex-1 relative">
                         <CircleGraph ref={graphRef} data={data} onNodeClick={setSelectedNode} />
                     </div>
-                    <div className="lg:col-span-1">
+                    <div className="w-full xl:w-[400px] shrink-0 flex flex-col gap-6">
+                        <TopicInsightCards data={data} llmInsight={llmData?.global_insight} />
                         <UserInsightPanel
                             user={selectedNode}
                             llmInsight={
