@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { buildZhihuCircle } from '@/lib/circle/buildCircle';
 import { ZhihuUser, ZhihuMoment } from '@/lib/zhihu/types';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
     // 构造更真实的 Mock 数据
     const me: ZhihuUser = { uid: 100, fullname: "Mock当前用户", headline: "Web 开发者" };
