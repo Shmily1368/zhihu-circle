@@ -3,6 +3,8 @@ import { getZhihuCircleRawData } from '@/lib/zhihu/client';
 import { analyzeCoverage } from '@/lib/circle/analyzeMomentCoverage';
 import { ZhihuUser } from '@/lib/zhihu/types';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
     try {
         const cookieStore = request.cookies;

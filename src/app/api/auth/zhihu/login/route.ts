@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
     const appId = process.env.ZHIHU_APP_ID;
     const redirectUri = process.env.ZHIHU_REDIRECT_URI;
