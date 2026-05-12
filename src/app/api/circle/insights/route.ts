@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateCircleInsights } from '@/lib/llm/generateInsights';
 import { ZhihuCircleResult } from '@/lib/zhihu/types';
 
+// 允许该 API 路由在 Vercel 上运行更长时间，防止大模型生成超时 (最大 60 秒)
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
     try {
         const circleData = (await request.json()) as ZhihuCircleResult;
