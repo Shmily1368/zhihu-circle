@@ -7,7 +7,14 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get('code');
 
     if (!code) {
-        return NextResponse.json({ error: 'Missing code parameter' }, { status: 400 });
+        // 打印所有的参数，方便排查知乎到底传了什么回来
+        const allParams = Object.fromEntries(searchParams.entries());
+        console.error('Missing code. Received params:', allParams);
+        return NextResponse.json({
+            error: 'Missing code parameter',
+            receivedParams: allParams,
+            url: request.url
+        }, { status: 400 });
     }
 
     const appId = process.env.ZHIHU_APP_ID;
