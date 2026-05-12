@@ -3,7 +3,7 @@ import { sanitizeUser, sanitizeUsers } from './sanitize';
 
 const BASE_URL = 'https://openapi.zhihu.com';
 
-async function zhihuFetch<T>(path: string, accessToken: string, params?: Record<string, string | number>): Promise<T> {
+export async function zhihuFetch<T>(path: string, accessToken: string, params?: Record<string, string | number>): Promise<T> {
     let url = `${BASE_URL}${path}`;
 
     if (params) {

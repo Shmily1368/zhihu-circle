@@ -18,6 +18,7 @@ export interface ZhihuMomentAuthor {
 export interface ZhihuMomentTarget {
     title?: string;
     excerpt?: string;
+    url?: string;
     author?: ZhihuMomentAuthor;
 }
 
@@ -25,6 +26,7 @@ export interface ZhihuMoment {
     actor?: ZhihuMomentAuthor;
     action_text?: string;
     action_time?: number;
+    url?: string;
     target?: ZhihuMomentTarget;
 }
 
@@ -83,16 +85,17 @@ export interface MomentCoverageStats {
     authorUnknown: number;
 }
 
+export interface CircleConfig {
+  circleCount: number;
+  innerCircleSize: number;
+}
+
 export interface ZhihuCircleResult {
-    center: ZhihuUser;
-    users: CircleUser[];
-    circles: {
-        circle1: CircleUser[];
-        circle2: CircleUser[];
-        circle3: CircleUser[];
-    };
-    unmatchedMomentPeople: UnmatchedMomentPerson[];
-    stats: MomentCoverageStats;
+  center: ZhihuUser;
+  users: CircleUser[];
+  circles: Record<string, CircleUser[]>;
+  unmatchedMomentPeople: UnmatchedMomentPerson[];
+  stats: MomentCoverageStats;
     globalInsights: {
         totalFollowed: number;
         totalFollowers: number;

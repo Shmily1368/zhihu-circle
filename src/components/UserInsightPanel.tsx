@@ -2,7 +2,7 @@
 
 import React from "react";
 import { CircleUser, ZhihuUser, UserLLMInsight } from "../lib/zhihu/types";
-import { ExternalLink, Target, Activity, Sparkles, Tag } from "lucide-react";
+import { ExternalLink, Target, Activity, Sparkles, Tag, FileText } from "lucide-react";
 
 interface Props {
     user: (CircleUser | ({ isCenter: true } & ZhihuUser)) | null;
@@ -26,6 +26,15 @@ export default function UserInsightPanel({ user, llmInsight }: Props) {
         my_follower: "我的粉丝",
         unknown: "无直接关注关系"
     };
+
+    const getZhihuWebUrl = (u: any) => {
+        if (u.url && u.url.includes('zhihu.com/people')) {
+            return u.url.replace('openapi.zhihu.com', 'www.zhihu.com').replace('api.zhihu.com', 'www.zhihu.com');
+        }
+        return `https://www.zhihu.com/people/${u.hash_id || u.uid}`;
+    };
+
+    const webUrl = getZhihuWebUrl(user);
 
     return (
         <div className="p-6 border border-slate-200 rounded-2xl bg-white shadow-sm h-full flex flex-col">
@@ -98,7 +107,7 @@ export default function UserInsightPanel({ user, llmInsight }: Props) {
                         )}
 
                         {llmInsight && (
-                            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+                            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl shrink-0">
                                 <h4 className="text-sm font-bold text-indigo-900 mb-3 flex items-center gap-2">
                                     <Sparkles size={16} className="text-indigo-600" />
                                     AI 关系洞察
@@ -127,7 +136,7 @@ export default function UserInsightPanel({ user, llmInsight }: Props) {
                         )}
 
                         {!llmInsight && cUser.reasons && cUser.reasons.length > 0 && (
-                            <div>
+                            <div className="shrink-0">
                                 <h4 className="text-sm font-bold text-slate-800 mb-2">打分依据</h4>
                                 <ul className="space-y-2">
                                     {cUser.reasons.map((r, idx) => (
@@ -139,13 +148,55 @@ export default function UserInsightPanel({ user, llmInsight }: Props) {
                                 </ul>
                             </div>
                         )}
+
+                        {cUser.recent_moments && cUser.recent_moments.length > 0 && (
+                            <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 flex-1 overflow-y-auto min-h-[150px]">
+                                <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                    <FileText size={16} className="text-zhihu-blue" />
+                                    近期动态证据
+                                </h4>
+                                <div className="space-y-3">
+                                    {cUser.recent_moments.slice(0, 5).map((m, idx) => {
+                                        const rawUrl = m.target?.url || m.url;
+                                        let mUrl = rawUrl ? rawUrl.replace('api.zhihu.com', 'www.zhihu.com').replace('openapi.zhihu.com', 'www.zhihu.com').replace(/answers?/g, 'answer').replace(/questions?/g, 'question') : undefined;
+                                        
+                                        // Fallback link if no direct URL is provided
+                                        if (!mUrl && m.target && m.target.title) {
+                                            mUrl = `https://www.zhihu.com/search?type=content&q=${encodeURIComponent(m.target.title)}`;
+                                        }
+
+                                        const Wrapper = mUrl ? 'a' : 'div';
+                                        
+                                        return (
+                                            <Wrapper 
+                                                key={idx} 
+                                                href={mUrl} 
+                                                target={mUrl ? "_blank" : undefined}
+                                                className={`text-xs text-slate-600 bg-white p-2.5 rounded border shadow-sm block ${mUrl ? 'border-blue-200 hover:border-zhihu-blue hover:shadow-md transition-all cursor-pointer relative group' : 'border-slate-100'}`}
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <span className="text-zhihu-blue font-medium">{m.action_text}</span>
+                                                    {mUrl && <ExternalLink size={12} className="text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                                </div>
+                                                {m.target && m.target.title && (
+                                                    <div className="font-bold text-slate-800 mt-1 line-clamp-1 pr-4">{m.target.title}</div>
+                                                )}
+                                                {m.target && m.target.excerpt && (
+                                                    <div className="mt-1 line-clamp-2 text-[10px] text-slate-500 leading-relaxed">{m.target.excerpt}</div>
+                                                )}
+                                            </Wrapper>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>
 
-            {user.url && (
+            {webUrl && (
                 <a
-                    href={user.url}
+                    href={webUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="mt-6 flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors text-sm font-medium"

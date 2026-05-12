@@ -3,16 +3,18 @@ import {
     ZhihuMoment,
     CircleUser,
     UnmatchedMomentPerson,
-    ZhihuCircleResult
+    ZhihuCircleResult,
+    CircleConfig
 } from '../zhihu/types';
-import { calculateScoreAndReasons, determineCircle } from './scoring';
+import { calculateScoreAndReasons } from './scoring';
 import { analyzeCoverage } from './analyzeMomentCoverage';
 
 export function buildZhihuCircle(
     me: ZhihuUser,
     followed: ZhihuUser[],
     followers: ZhihuUser[],
-    moments: ZhihuMoment[]
+    moments: ZhihuMoment[],
+    config: CircleConfig = { circleCount: 3, innerCircleSize: 30 }
 ): ZhihuCircleResult {
 
     // 1. 构建基础映射与索引
@@ -141,30 +143,71 @@ export function buildZhihuCircle(
 
     // 4. 计算得分与分层
     const users: CircleUser[] = [];
-    const circles = { circle1: [] as CircleUser[], circle2: [] as CircleUser[], circle3: [] as CircleUser[] };
+    const circles: Record<string, CircleUser[]> = {};
+    for (let i = 1; i <= config.circleCount; i++) {
+        circles[`circle${i}`] = [];
+    }
 
-    for (const cUser of Array.from(circleUserMap.values())) {
+    const scoredUsers = Array.from(circleUserMap.values()).map(cUser => {
         const { score, reasons } = calculateScoreAndReasons(cUser);
         cUser.score = score;
         cUser.reasons = reasons;
+        return cUser;
+    }).filter(u => u.score > 0);
 
-        // 低置信度不能进入 Circle 1
-        const finalCircle = determineCircle(score, cUser.match_confidence);
+    // --- 将未匹配到的高频互动用户也转化为节点放入图谱 ---
+    // 这就是你提到的“不是我关注的、也不是关注我的”人。
+    // 他们是动态流里的野生大V或内容作者，属于你的“潜在内容扩散圈”。
+    Array.from(unmatchedPeopleMap.values()).forEach((unmatched, index) => {
+        // 只有当他们在你的动态里出现超过 1 次（说明是高频出现），才值得被画出来
+        if (unmatched.actor_count + unmatched.author_count >= 2) {
+            const pseudoUid = -10000 - index; // 给一个负数假 UID
+            const unmatchedScore = Math.min(30, (unmatched.actor_count * 5) + (unmatched.author_count * 3));
 
-        // 如果虽然得分够高，但 match_confidence 偏低，强制降级到 2 或 3
-        cUser.circle = (finalCircle === 1 && cUser.match_confidence !== 'high') ? 2 : finalCircle;
+            const unmatchedUser: CircleUser = {
+                uid: pseudoUid,
+                fullname: unmatched.name,
+                is_followed_by_me: false,
+                is_my_follower: false,
+                relation_type: "unknown",
+                moment_actor_count: unmatched.actor_count,
+                moment_author_count: unmatched.author_count,
+                recent_moments: [],
+                score: unmatchedScore,
+                circle: 3, // 默认放入最外层（或者扩散圈）
+                reasons: [`TA 虽然不在你的关注/粉丝列表，但近期在你关注的信息流中高频出现了 ${unmatched.actor_count + unmatched.author_count} 次。属于“内容扩散圈”。`],
+                match_confidence: "low"
+            };
 
+            scoredUsers.push(unmatchedUser);
+        }
+    });
+
+    const validUsers = scoredUsers.sort((a, b) => b.score - a.score);
+
+    let currentCircle = 1;
+    let currentCapacity = config.innerCircleSize;
+    let currentCount = 0;
+
+    for (const cUser of validUsers) {
+        if (config.innerCircleSize === 0) break; // 如果基准人数为 0，则不显示任何圈层（只保留自己）
+        if (currentCircle > config.circleCount) {
+            // 如果所有配置的圈层都满了，不再将后续用户加入到可视化数据中
+            break;
+        }
+
+        cUser.circle = currentCircle as 1 | 2 | 3;
+        circles[`circle${currentCircle}`].push(cUser);
+        currentCount++;
+
+        // Check if current circle is full
+        if (currentCount >= currentCapacity) {
+            currentCircle++;
+            currentCapacity = config.innerCircleSize * currentCircle; // 依次增加人数
+            currentCount = 0;
+        }
         users.push(cUser);
-        if (cUser.circle === 1) circles.circle1.push(cUser);
-        else if (cUser.circle === 2) circles.circle2.push(cUser);
-        else circles.circle3.push(cUser);
     }
-
-    // 排序：分数高的在前面
-    users.sort((a, b) => b.score - a.score);
-    circles.circle1.sort((a, b) => b.score - a.score);
-    circles.circle2.sort((a, b) => b.score - a.score);
-    circles.circle3.sort((a, b) => b.score - a.score);
 
     // 获取简单的 name -> ZhihuUser 映射用于 Coverage 分析（优先 followed）
     const simpleFollowedMap = new Map<string, ZhihuUser>();

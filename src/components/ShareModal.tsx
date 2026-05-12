@@ -1,32 +1,39 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import * as htmlToImage from "html-to-image";
+import { QRCodeSVG } from "qrcode.react";
 import { X, Download, ShieldCheck } from "lucide-react";
 import { ZhihuCircleResult, GlobalLLMInsight } from "../lib/zhihu/types";
 
 interface Props {
   data: ZhihuCircleResult;
   llmInsight?: GlobalLLMInsight;
+  graphImage?: string | null;
   onClose: () => void;
 }
 
-export default function ShareModal({ data, llmInsight, onClose }: Props) {
+export default function ShareModal({ data, llmInsight, graphImage, onClose }: Props) {
   const [hideNames, setHideNames] = useState(false);
   const [generating, setGenerating] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const { center, circles, globalInsights } = data;
-  const top9 = circles.circle1.slice(0, 9);
-  
+  const { center, globalInsights } = data;
+
   const keywords = llmInsight?.top_topics || ['关注链', '内容影响', '信息流'];
   const shareText = llmInsight?.share_text || "快来生成你的知乎信息宇宙吧！";
+
+  const getProxyUrl = (url: string | undefined) => url ? `/api/image-proxy?url=${encodeURIComponent(url)}` : '';
 
   const handleDownload = async () => {
     if (!cardRef.current) return;
     try {
       setGenerating(true);
-      const dataUrl = await htmlToImage.toPng(cardRef.current, { quality: 0.95 });
+      const dataUrl = await htmlToImage.toPng(cardRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
+        fetchRequestInit: { mode: 'cors' } // 解决跨域的推荐方式
+      });
       const link = document.createElement('a');
       link.download = `ZhihuCircle_${center.fullname}.png`;
       link.href = dataUrl;
@@ -66,76 +73,70 @@ export default function ShareModal({ data, llmInsight, onClose }: Props) {
           </div>
 
           {/* 分享卡片实体 */}
-          <div 
-            ref={cardRef} 
-            className="w-[375px] bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 rounded-2xl shadow-xl overflow-hidden shrink-0"
+          <div
+            ref={cardRef}
+            className="w-[400px] bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 rounded-2xl shadow-xl overflow-hidden shrink-0"
           >
             {/* Header */}
-            <div className="p-8 text-center border-b border-white/10">
+            <div className="p-8 pb-4 text-center">
               {center.avatar_path ? (
-                <img src={center.avatar_path} alt="me" className="w-20 h-20 rounded-full mx-auto border-4 border-white/20 mb-4" />
+                <img src={getProxyUrl(center.avatar_path)} crossOrigin="anonymous" alt="me" className="w-16 h-16 rounded-full mx-auto border-4 border-white/20 mb-3" />
               ) : (
-                <div className="w-20 h-20 rounded-full bg-zhihu-blue text-white mx-auto border-4 border-white/20 mb-4 flex items-center justify-center text-2xl font-bold">
+                <div className="w-16 h-16 rounded-full bg-zhihu-blue text-white mx-auto border-4 border-white/20 mb-3 flex items-center justify-center text-2xl font-bold">
                   {center.fullname.charAt(0)}
                 </div>
               )}
-              <h3 className="text-2xl font-bold text-white mb-1">{center.fullname}</h3>
-              <p className="text-indigo-200 text-sm">我的知乎信息宇宙</p>
-            </div>
-
-            {/* Keywords */}
-            <div className="px-8 py-6 flex flex-wrap justify-center gap-2">
-              {keywords.map((kw, i) => (
-                <span key={i} className="px-3 py-1 bg-white/10 border border-white/20 rounded-full text-xs text-white backdrop-blur-md">
-                  {kw}
-                </span>
-              ))}
-            </div>
-
-            {/* Core Circle */}
-            <div className="px-8 pb-6">
-              <p className="text-center text-xs text-indigo-300 mb-4 tracking-widest uppercase">核心影响圈 TOP 9</p>
-              <div className="grid grid-cols-3 gap-4">
-                {top9.map(u => (
-                  <div key={u.uid} className="flex flex-col items-center">
-                    {u.avatar_path ? (
-                      <img src={u.avatar_path} alt="avatar" className="w-12 h-12 rounded-full border-2 border-indigo-400/50 mb-2" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-indigo-500/30 text-indigo-100 flex items-center justify-center text-sm font-bold border-2 border-indigo-400/50 mb-2">
-                        {u.fullname.charAt(0)}
-                      </div>
-                    )}
-                    <span className="text-xs text-indigo-100 truncate w-full text-center">
-                      {hideNames ? `${u.fullname.charAt(0)}**` : u.fullname}
-                    </span>
-                  </div>
+              <h3 className="text-xl font-bold text-white mb-1">{center.fullname} 的知乎宇宙</h3>
+              <div className="flex justify-center gap-2 mt-3">
+                {keywords.map((kw, i) => (
+                  <span key={i} className="px-2 py-0.5 bg-white/10 border border-white/20 rounded text-[10px] text-white backdrop-blur-md">
+                    {kw}
+                  </span>
                 ))}
               </div>
             </div>
 
-            {/* Stats */}
-            <div className="px-8 py-6 bg-black/40 flex justify-between text-center">
-              <div>
-                <p className="text-lg font-bold text-white">{globalInsights.totalFollowed}</p>
-                <p className="text-[10px] text-indigo-300">关注</p>
+            {/* Graph Screenshot */}
+            {graphImage && (
+              <div className="px-4 py-4 flex justify-center">
+                <div className="w-full bg-white/5 rounded-xl border border-white/10 p-2 overflow-hidden flex items-center justify-center">
+                  <img src={graphImage} alt="ZhihuCircle Graph" className="w-full max-w-[340px] rounded-lg object-contain mix-blend-screen" />
+                </div>
               </div>
-              <div>
-                <p className="text-lg font-bold text-white">{globalInsights.totalFollowers}</p>
-                <p className="text-[10px] text-indigo-300">粉丝</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold text-zhihu-blue">{globalInsights.mutualFollowCount}</p>
-                <p className="text-[10px] text-indigo-300">互关</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold text-white">{globalInsights.totalMoments}</p>
-                <p className="text-[10px] text-indigo-300">近期动态</p>
-              </div>
-            </div>
+            )}
 
-            {/* Footer */}
-            <div className="p-6 text-center">
-              <p className="text-sm text-indigo-200 italic">"{shareText}"</p>
+            {/* Stats & QR Code */}
+            <div className="p-6 bg-black/40 flex items-center justify-between">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 flex-1">
+                <div>
+                  <p className="text-lg font-bold text-white leading-none">{globalInsights.totalFollowed}</p>
+                  <p className="text-[10px] text-indigo-300">关注</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-white leading-none">{globalInsights.totalFollowers}</p>
+                  <p className="text-[10px] text-indigo-300">粉丝</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-zhihu-blue leading-none">{globalInsights.mutualFollowCount}</p>
+                  <p className="text-[10px] text-indigo-300">互关</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-white leading-none">{globalInsights.totalMoments}</p>
+                  <p className="text-[10px] text-indigo-300">动态</p>
+                </div>
+              </div>
+              <div className="shrink-0 flex flex-col items-center border-l border-white/10 pl-6">
+                <div className="p-1 bg-white rounded-lg mb-1.5">
+                  <QRCodeSVG
+                    value="https://github.com/your-username/ZhihuCircle"
+                    size={64}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                    level="L"
+                  />
+                </div>
+                <p className="text-[9px] text-indigo-300 font-medium tracking-wider">扫码生成你的宇宙</p>
+              </div>
             </div>
           </div>
         </div>
@@ -144,8 +145,8 @@ export default function ShareModal({ data, llmInsight, onClose }: Props) {
           <button onClick={onClose} className="px-6 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">
             取消
           </button>
-          <button 
-            onClick={handleDownload} 
+          <button
+            onClick={handleDownload}
             disabled={generating}
             className="flex items-center gap-2 px-6 py-2.5 bg-zhihu-blue text-white font-medium rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
           >

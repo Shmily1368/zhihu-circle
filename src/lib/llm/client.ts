@@ -14,7 +14,8 @@ export async function callLLM(promptData: any): Promise<LLMAnalysisResult> {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
+            'Authorization': `Bearer ${apiKey}`,
+            'User-Agent': 'claude-code/0.1.0'
         },
         body: JSON.stringify({
             model: model,
