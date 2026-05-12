@@ -96,12 +96,23 @@ export function buildZhihuCircle(
         return null;
     };
 
-    const handleMomentPerson = (name: string, isActor: boolean, moment: ZhihuMoment) => {
+    const handleMomentPerson = (authorInfo: import('../zhihu/types').ZhihuMomentAuthor, isActor: boolean, moment: ZhihuMoment) => {
+        if (!authorInfo.name) return;
+        const name = authorInfo.name;
         const match = findUniqueUidByName(name);
+
+        let finalAvatar = authorInfo.avatar_url;
+        if (!finalAvatar && authorInfo.avatar_url_template) {
+            finalAvatar = authorInfo.avatar_url_template.replace('_{size}', '_l').replace('_{size}', '_l');
+        }
 
         if (match) {
             const cUser = circleUserMap.get(match.uid);
             if (cUser) {
+                // 如果原始抓取的列表中没有头像/签名等，尝试从动态里补全
+                if (!cUser.avatar_path && finalAvatar) cUser.avatar_path = finalAvatar;
+                if (!cUser.headline && authorInfo.headline) cUser.headline = authorInfo.headline;
+
                 if (isActor) cUser.moment_actor_count++;
                 else cUser.moment_author_count++;
 
@@ -114,9 +125,32 @@ export function buildZhihuCircle(
                 }
             }
         } else {
+            const extractToken = (info: import('../zhihu/types').ZhihuMomentAuthor) => {
+                if (info.url_token) return info.url_token;
+                if (info.id) return info.id;
+                if (info.url) {
+                    const parts = info.url.split('/');
+                    return parts[parts.length - 1];
+                }
+                return undefined;
+            };
+
             // 无法匹配或重名，放入 Unmatched
             if (!unmatchedPeopleMap.has(name)) {
-                unmatchedPeopleMap.set(name, { name, actor_count: 0, author_count: 0, reason: '' });
+                unmatchedPeopleMap.set(name, {
+                    name,
+                    actor_count: 0,
+                    author_count: 0,
+                    reason: '',
+                    avatar_url: finalAvatar,
+                    url_token: extractToken(authorInfo),
+                    headline: authorInfo.headline
+                });
+            } else {
+                const existing = unmatchedPeopleMap.get(name)!;
+                if (!existing.avatar_url && finalAvatar) existing.avatar_url = finalAvatar;
+                if (!existing.url_token && extractToken(authorInfo)) existing.url_token = extractToken(authorInfo);
+                if (!existing.headline && authorInfo.headline) existing.headline = authorInfo.headline;
             }
             const unmatch = unmatchedPeopleMap.get(name)!;
             if (isActor) unmatch.actor_count++;
@@ -127,17 +161,17 @@ export function buildZhihuCircle(
             if (inFollowed.length + inFollowers.length > 1) {
                 unmatch.reason = "重名冲突，无法精确匹配";
             } else {
-                unmatch.reason = "不在关注或粉丝列表中";
+                unmatch.reason = "未在本次抓取的名单中匹配到（可能是由于接口分页限制未拉取到的早期关注者）";
             }
         }
     };
 
     moments.forEach(m => {
-        if (m.actor?.name) {
-            handleMomentPerson(m.actor.name, true, m);
+        if (m.actor) {
+            handleMomentPerson(m.actor, true, m);
         }
-        if (m.target?.author?.name) {
-            handleMomentPerson(m.target.author.name, false, m);
+        if (m.target?.author) {
+            handleMomentPerson(m.target.author, false, m);
         }
     });
 
@@ -166,7 +200,10 @@ export function buildZhihuCircle(
 
             const unmatchedUser: CircleUser = {
                 uid: pseudoUid,
+                hash_id: unmatched.url_token,
                 fullname: unmatched.name,
+                avatar_path: unmatched.avatar_url,
+                headline: unmatched.headline,
                 is_followed_by_me: false,
                 is_my_follower: false,
                 relation_type: "unknown",
@@ -175,7 +212,7 @@ export function buildZhihuCircle(
                 recent_moments: [],
                 score: unmatchedScore,
                 circle: 3, // 默认放入最外层（或者扩散圈）
-                reasons: [`TA 虽然不在你的关注/粉丝列表，但近期在你关注的信息流中高频出现了 ${unmatched.actor_count + unmatched.author_count} 次。属于“内容扩散圈”。`],
+                reasons: [`虽然未在本次抓取的关注/粉丝列表中精确匹配到该用户（可能受限于分页或重名），但 TA 近期在你关注的信息流中高频出现了 ${unmatched.actor_count + unmatched.author_count} 次。属于你的“内容扩散圈”。`],
                 match_confidence: "low"
             };
 

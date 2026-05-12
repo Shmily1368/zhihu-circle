@@ -5,81 +5,59 @@ import * as echarts from "echarts";
 import { ZhihuCircleResult, CircleUser } from "../lib/zhihu/types";
 
 export interface CircleGraphRef {
-  getDataURL: () => string | null;
+  getDataURL: (hideNames?: boolean) => string | null;
+  resetTransform: () => void;
 }
 
 interface Props {
   data: ZhihuCircleResult;
-  onNodeClick?: (user: CircleUser | { isCenter: true } & ZhihuCircleResult['center']) => void;
+  onNodeClick?: (user: CircleUser | ({ isCenter: true } & ZhihuCircleResult['center']) | null) => void;
 }
 
 const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, ref) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const myChartInstance = useRef<echarts.ECharts | null>(null);
 
-  useImperativeHandle(ref, () => ({
-    getDataURL: () => {
-      if (myChartInstance.current) {
-        return myChartInstance.current.getDataURL({
-          type: 'png',
-          pixelRatio: 2,
-          backgroundColor: '#fff'
-        });
-      }
-      return null;
-    }
-  }));
-
-  useEffect(() => {
-    if (!chartRef.current) return;
-
-    if (!myChartInstance.current) {
-      myChartInstance.current = echarts.init(chartRef.current);
-    }
-    const myChart = myChartInstance.current;
-
-    const handleResize = () => {
-      myChart.resize();
-    };
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      myChart.dispose();
-      myChartInstance.current = null;
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!myChartInstance.current || !data) return;
-    const myChart = myChartInstance.current;
+  const generateOption = (chartData: ZhihuCircleResult, withAnimation: boolean, theme: 'light' | 'dark' = 'light', hideNames: boolean = false): echarts.EChartsCoreOption => {
+    const isDark = theme === 'dark';
+    const textColor = isDark ? '#ffffff' : '#333333';
+    const subTextColor = isDark ? '#cbd5e1' : '#666666'; // slate-300 for dark mode
+    const lineStroke = isDark ? 'rgba(255, 255, 255, 0.2)' : '#e2e8f0';
+    const centerBorder = isDark ? 'rgba(255, 255, 255, 0.8)' : '#ffffff';
 
     // 构造节点
     const nodes: any[] = [];
     const edges: any[] = [];
 
-    // 代理 URL，防止 Canvas 污染
+    //代理 URL，防止 Canvas 污染
     const getProxyUrl = (url: string | undefined) => url ? `/api/image-proxy?url=${encodeURIComponent(url)}` : '';
 
+    // 获取数据真实圈数
+    const dataCircleKeys = Object.keys(chartData.circles).sort(); // circle1, circle2...
+    const maxCircleCount = Math.max(3, dataCircleKeys.length);
+
+    // 计算整体缩放系数：圈数越多，头像越小。基准圈数为 3 圈时比例为 1
+    const scaleFactor = Math.max(0.5, 3 / maxCircleCount);
+
     // 1. 中心节点
-    const centerSize = 80;
+    const centerSize = 80 * scaleFactor;
     nodes.push({
       id: 'center',
-      name: data.center.fullname,
-      symbolSize: data.center.avatar_path ? 0 : centerSize, // 如果有头像，利用 rich text 的宽高撑起
+      name: chartData.center.fullname,
+      symbolSize: chartData.center.avatar_path ? 0 : centerSize, // 如果有头像，利用 rich text 的宽高撑起
       x: 0,
       y: 0,
       category: 0,
-      itemStyle: { color: '#056de8', borderColor: '#fff', borderWidth: 3, shadowBlur: 10, shadowColor: 'rgba(5,109,232,0.5)' },
-      label: data.center.avatar_path ? {
+      itemStyle: { color: '#056de8', borderColor: centerBorder, borderWidth: 3, shadowBlur: 10, shadowColor: 'rgba(5,109,232,0.5)' },
+      label: chartData.center.avatar_path ? {
         show: true,
         formatter: [
           `{avatar|}`,
-          `{name|${data.center.fullname}}`
+          `{name|${chartData.center.fullname}}`
         ].join('\n'),
         rich: {
           avatar: {
-            backgroundColor: { image: getProxyUrl(data.center.avatar_path) },
+            backgroundColor: { image: getProxyUrl(chartData.center.avatar_path) },
             width: centerSize,
             height: centerSize,
             borderRadius: centerSize / 2,
@@ -89,39 +67,46 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
             shadowColor: 'rgba(5,109,232,0.5)'
           },
           name: {
-            color: '#333',
+            color: textColor,
             fontWeight: 'bold',
-            marginTop: 8
+            marginTop: 8,
+            align: 'center'
           }
         },
         position: 'inside'
-      } : { 
-        show: true, 
-        position: 'inside', 
-        formatter: data.center.fullname.charAt(0),
-        color: '#fff', 
+      } : {
+        show: true,
+        position: 'inside',
+        formatter: chartData.center.fullname.charAt(0),
+        color: '#fff',
         fontSize: centerSize * 0.4,
-        fontWeight: 'bold' 
+        fontWeight: 'bold'
       },
-      userData: { isCenter: true, ...data.center }
+      userData: { isCenter: true, ...chartData.center }
     });
 
     // 计算各层半径
-    const circleKeys = Object.keys(data.circles).sort(); // circle1, circle2...
+    // 这里做了一个小优化：如果传入的数据圈层少于 3 层（比如只配了 1 圈或者 2 圈），
+    // 依然强制绘制至少 3 个虚线圆环，这样即使节点很少，视觉上也依然有“同心圆轨道”的感觉。
+    const displayCircleKeys = Array.from({ length: maxCircleCount }, (_, i) => `circle${i + 1}`);
+
     const radii: Record<string, number> = {};
     const categories = [{ name: "Center" }];
     const graphicCircles: any[] = [];
     const colors = ['#ff7a45', '#36cfc9', '#b37feb', '#ffc53d', '#5cdbd3', '#ff85c0'];
 
-    const baseRadius = 240;
-    circleKeys.forEach((key, idx) => {
+    const baseRadius = 200;
+    // 动态调整圈层间距：圈层越多，间距越小，防止溢出。最小间距保持 120
+    const radiusStep = Math.max(120, 480 / maxCircleCount);
+
+    displayCircleKeys.forEach((key, idx) => {
       const cNum = idx + 1;
-      radii[key] = baseRadius + idx * 160;
+      radii[key] = baseRadius + idx * radiusStep;
       categories.push({ name: `Circle ${cNum}` });
       graphicCircles.push({
         type: 'circle',
         shape: { cx: 0, cy: 0, r: radii[key] },
-        style: { fill: 'none', stroke: '#e2e8f0', lineDash: [5, 5], lineWidth: 1 },
+        style: { fill: 'none', stroke: lineStroke, lineDash: [5, 5], lineWidth: 1 },
         z: -10
       });
     });
@@ -131,8 +116,8 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
       const count = circleArray.length;
       circleArray.forEach((user, idx) => {
         const angle = (idx / count) * 2 * Math.PI;
-        // 节点大小根据 score，最小 15，最大 50
-        const size = Math.max(20, Math.min(user.score, 50));
+        // 节点大小根据 score，并应用整体圈数缩放系数
+        const size = Math.max(20, Math.min(user.score, 50)) * scaleFactor;
 
         nodes.push({
           id: String(user.uid),
@@ -146,7 +131,7 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
             show: true,
             formatter: [
               `{avatar|}`,
-              size > 30 ? `{name|${user.fullname}}` : ''
+              (!hideNames) ? `{name|${user.fullname}}` : ''
             ].join('\n'),
             rich: {
               avatar: {
@@ -159,15 +144,16 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
               },
               name: {
                 fontSize: 10,
-                color: '#666',
-                marginTop: 2
+                color: subTextColor,
+                marginTop: 2,
+                align: 'center'
               }
             },
             position: 'inside'
           } : {
             show: true,
             position: 'inside',
-            formatter: user.fullname.charAt(0),
+            formatter: hideNames ? '' : user.fullname.charAt(0),
             color: '#fff',
             fontSize: size * 0.6,
             fontWeight: 'bold'
@@ -180,21 +166,22 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
           edges.push({
             source: 'center',
             target: String(user.uid),
-            lineStyle: { opacity: 0.3, width: 1, color: '#056de8' }
+            lineStyle: { opacity: isDark ? 0.5 : 0.3, width: 1, color: '#056de8' }
           });
         }
       });
     };
 
-    circleKeys.forEach((key, idx) => {
-      placeNodes(data.circles[key], radii[key], idx + 1, colors[idx % colors.length]);
+    dataCircleKeys.forEach((key, idx) => {
+      placeNodes(chartData.circles[key], radii[key], idx + 1, colors[idx % colors.length]);
     });
 
-    const option: echarts.EChartsCoreOption = {
+    return {
       backgroundColor: 'transparent',
-      animationDuration: 1500, // 初始入场动画加长，给人一种飘入的感觉
+      animation: withAnimation,
+      animationDuration: withAnimation ? 1500 : 0, // 初始入场动画加长，给人一种飘入的感觉
       animationEasing: 'cubicOut',
-      animationDurationUpdate: 400, // 缩短找位置的时间，使得圈层切换动作更干脆、明显
+      animationDurationUpdate: withAnimation ? 400 : 0, // 缩短找位置的时间，使得圈层切换动作更干脆、明显
       animationEasingUpdate: 'cubicOut', // 使用 ECharts 支持的标准缓动函数
       tooltip: {
         formatter: (params: any) => {
@@ -222,8 +209,78 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
         }
       ]
     };
+  };
 
-    myChart.setOption(option, true); // Use true to prevent merging with old data
+  useImperativeHandle(ref, () => ({
+    getDataURL: (hideNames: boolean = false) => {
+      if (myChartInstance.current && data) {
+        const myChart = myChartInstance.current;
+        // 1. 临时切换到暗色主题（无动画），并应用 hideNames 设置
+        myChart.setOption(generateOption(data, false, 'dark', hideNames), true);
+
+        // 2. 导出透明背景的图片，使 ShareCard 的渐变背景能透出来
+        const url = myChart.getDataURL({
+          type: 'png',
+          pixelRatio: 2,
+          backgroundColor: 'transparent'
+        });
+
+        // 3. 瞬间切回亮色主题（恢复名字显示），恢复页面原样
+        myChart.setOption(generateOption(data, false, 'light', false), true);
+
+        return url;
+      }
+      return null;
+    },
+    resetTransform: () => {
+      if (myChartInstance.current && chartRef.current && data) {
+        // 1. 完全销毁旧实例以清除 roam 状态 (拖拽和缩放)
+        myChartInstance.current.dispose();
+
+        // 2. 重新初始化
+        myChartInstance.current = echarts.init(chartRef.current);
+        const myChart = myChartInstance.current;
+
+        // 3. 用无动画模式瞬间渲染最新的数据状态
+        const option = generateOption(data, false);
+        myChart.setOption(option, true);
+
+        // 4. 重新绑定点击事件
+        myChart.on("click", (params: any) => {
+          if (params.dataType === "node" && onNodeClick && params.data && params.data.userData) {
+            onNodeClick(params.data.userData);
+          }
+        });
+      }
+    }
+  }), [data, onNodeClick]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    if (!myChartInstance.current) {
+      myChartInstance.current = echarts.init(chartRef.current);
+    }
+    const myChart = myChartInstance.current;
+
+    const handleResize = () => {
+      myChart.resize();
+    };
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      myChart.dispose();
+      myChartInstance.current = null;
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!myChartInstance.current || !data) return;
+    const myChart = myChartInstance.current;
+
+    const option = generateOption(data, true);
+    myChart.setOption(option, false); // Use false to merge with old data and enable smooth position animations
 
     myChart.off("click"); // remove previous listeners
     myChart.on("click", (params: any) => {
@@ -232,9 +289,16 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
       }
     });
 
+    // 监听画布空白处的点击事件，用于取消选中
+    myChart.getZr().on("click", (params: any) => {
+      if (!params.target && onNodeClick) {
+        onNodeClick(null);
+      }
+    });
+
   }, [data, onNodeClick]);
 
-  return <div ref={chartRef} className="w-full h-[80vh] min-h-[800px] border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden" />;
+  return <div ref={chartRef} className="w-full h-[80vh] min-h-[750px] border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden" />;
 });
 
 export default CircleGraph;

@@ -33,13 +33,8 @@ export async function GET(request: NextRequest) {
             if (followedUids.has(u.uid)) mutualFollowCount++;
         });
 
-        // 只截取前 5 条作为预览，并脱敏
-        const previewMoments = rawData.moments.slice(0, 5).map(m => ({
-            actor_name: m.actor?.name,
-            action_text: m.action_text,
-            target_author: m.target?.author?.name,
-            target_title: m.target?.title
-        }));
+        // 只截取前 5 条作为预览，不过滤，看完整结构
+        const previewMoments = rawData.moments.slice(0, 5);
 
         return NextResponse.json({
             status: 'success',

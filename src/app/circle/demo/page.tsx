@@ -12,6 +12,7 @@ import { ZhihuCircleResult, CircleUser, LLMAnalysisResult, CircleConfig } from "
 export default function DemoCirclePage() {
     const [data, setData] = useState<ZhihuCircleResult | null>(null);
     const [llmData, setLlmData] = useState<LLMAnalysisResult | null>(null);
+    const [isLlmGenerating, setIsLlmGenerating] = useState(false);
     const [selectedNode, setSelectedNode] = useState<(CircleUser | { isCenter: true } & ZhihuCircleResult['center']) | null>(null);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [config, setConfig] = useState<CircleConfig>({ circleCount: 3, innerCircleSize: 20 });
@@ -37,6 +38,7 @@ export default function DemoCirclePage() {
                     setData(circleData);
 
                     // 异步触发 LLM 分析
+                    setIsLlmGenerating(true);
                     fetch('/api/circle/insights', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -48,7 +50,8 @@ export default function DemoCirclePage() {
                                 setLlmData(llmRes.data);
                             }
                         })
-                        .catch(e => console.warn('LLM analysis failed', e));
+                        .catch(e => console.warn('LLM analysis failed', e))
+                        .finally(() => setIsLlmGenerating(false));
                 }
             });
     }, []);
@@ -69,15 +72,16 @@ export default function DemoCirclePage() {
                         <h1 className="text-3xl font-bold text-slate-900">ZhihuCircle 探索</h1>
                         <p className="text-slate-500 mt-1">你的知乎信息宇宙 (Demo 模式)</p>
                     </div>
-                    <ShareCard onShare={handleOpenShare} />
                 </header>
 
                 <div className="flex flex-col xl:flex-row gap-6">
                     <div className="flex-1 relative">
+                        <div className="absolute bottom-6 right-6 z-10">
+                            <ShareCard onShare={handleOpenShare} />
+                        </div>
                         <CircleGraph ref={graphRef} data={data} onNodeClick={setSelectedNode} />
                     </div>
-                    <div className="w-full xl:w-[400px] shrink-0 flex flex-col gap-6">
-                        <TopicInsightCards data={data} llmInsight={llmData?.global_insight} />
+                    <div className="w-full xl:w-[400px] shrink-0 flex flex-col gap-6 h-[80vh] overflow-y-auto pr-2 pb-4">
                         <UserInsightPanel
                             user={selectedNode}
                             llmInsight={
@@ -85,7 +89,9 @@ export default function DemoCirclePage() {
                                     ? llmData?.users.find(u => u.uid === selectedNode.uid)
                                     : undefined
                             }
+                            isLlmGenerating={isLlmGenerating}
                         />
+                        <TopicInsightCards data={data} llmInsight={llmData?.global_insight} isLlmGenerating={isLlmGenerating} />
                     </div>
                 </div>
             </div>

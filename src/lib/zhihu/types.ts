@@ -12,7 +12,13 @@ export interface ZhihuUser {
 }
 
 export interface ZhihuMomentAuthor {
+    id?: string;
+    url_token?: string;
     name?: string;
+    avatar_url?: string;
+    avatar_url_template?: string;
+    headline?: string;
+    url?: string;
 }
 
 export interface ZhihuMomentTarget {
@@ -73,6 +79,9 @@ export interface UnmatchedMomentPerson {
     actor_count: number;
     author_count: number;
     reason: string;
+    avatar_url?: string;
+    url_token?: string;
+    headline?: string;
 }
 
 export interface MomentCoverageStats {

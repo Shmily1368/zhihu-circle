@@ -39,7 +39,7 @@ export default function CircleConfigPanel({ config, onConfigChange, onRegenerate
 
   const handleFollowersBlur = () => {
     let val = parseInt(followersInput) || 1;
-    val = Math.max(1, Math.min(1000000, val));
+    val = Math.max(1, Math.min(10000, val));
     setFollowersInput(val.toString());
     onConfigChange({ ...config, followersPages: val });
   };
@@ -49,7 +49,7 @@ export default function CircleConfigPanel({ config, onConfigChange, onRegenerate
       <div className="flex items-center gap-2 text-slate-800 font-bold pb-2 border-b border-slate-100">
         <Settings2 className="text-zhihu-blue" size={20} /> 宇宙配置
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
         {/* 视觉配置区 */}
         <div className="flex flex-col gap-4">
@@ -63,7 +63,7 @@ export default function CircleConfigPanel({ config, onConfigChange, onRegenerate
                 <label className="text-sm font-medium text-slate-600">外放圈层数量</label>
                 <span className="text-sm font-bold text-zhihu-blue">{config.circleCount} 圈</span>
               </div>
-              <input 
+              <input
                 type="range" min="1" max="5" step="1"
                 value={config.circleCount}
                 onChange={(e) => onConfigChange({ ...config, circleCount: parseInt(e.target.value) })}
@@ -76,7 +76,7 @@ export default function CircleConfigPanel({ config, onConfigChange, onRegenerate
                 <label className="text-sm font-medium text-slate-600">最内圈基准人数</label>
                 <span className="text-sm font-bold text-zhihu-blue">{config.innerCircleSize} 人</span>
               </div>
-              <input 
+              <input
                 type="range" min="0" max="50" step="5"
                 value={config.innerCircleSize}
                 onChange={(e) => onConfigChange({ ...config, innerCircleSize: parseInt(e.target.value) })}
@@ -96,11 +96,10 @@ export default function CircleConfigPanel({ config, onConfigChange, onRegenerate
             <button
               onClick={onRegenerate}
               disabled={isGenerating}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                isGenerating 
-                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                  : 'bg-zhihu-blue text-white hover:bg-blue-600 shadow-sm hover:shadow active:scale-95'
-              }`}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${isGenerating
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'bg-zhihu-blue text-white hover:bg-blue-600 shadow-sm hover:shadow active:scale-95'
+                }`}
             >
               {isGenerating ? '正在抓取中...' : '应用并重新抓取'}
             </button>
@@ -110,18 +109,18 @@ export default function CircleConfigPanel({ config, onConfigChange, onRegenerate
               <div className="flex justify-between items-center">
                 <label className="text-sm font-medium text-slate-600">抓取关注人数上限</label>
                 <div className="flex items-center gap-1">
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     value={followedInput}
                     onChange={(e) => setFollowedInput(e.target.value)}
                     onBlur={handleFollowedBlur}
                     onKeyDown={(e) => e.key === 'Enter' && handleFollowedBlur()}
-                    className="w-24 text-right text-sm font-bold text-zhihu-blue bg-blue-50/50 border border-blue-100 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-zhihu-blue transition-all"
+                    className="w-20 text-right text-sm font-bold text-zhihu-blue bg-blue-50/50 border border-blue-100 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-zhihu-blue transition-all"
                   />
                   <span className="text-sm font-medium text-slate-500">人</span>
                 </div>
               </div>
-              <input 
+              <input
                 type="range" min="1" max="10000" step="50"
                 value={config.followedPages}
                 onChange={(e) => onConfigChange({ ...config, followedPages: parseInt(e.target.value) })}
@@ -133,19 +132,19 @@ export default function CircleConfigPanel({ config, onConfigChange, onRegenerate
               <div className="flex justify-between items-center">
                 <label className="text-sm font-medium text-slate-600">抓取粉丝人数上限</label>
                 <div className="flex items-center gap-1">
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     value={followersInput}
                     onChange={(e) => setFollowersInput(e.target.value)}
                     onBlur={handleFollowersBlur}
                     onKeyDown={(e) => e.key === 'Enter' && handleFollowersBlur()}
-                    className="w-24 text-right text-sm font-bold text-zhihu-blue bg-blue-50/50 border border-blue-100 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-zhihu-blue transition-all"
+                    className="w-20 text-right text-sm font-bold text-zhihu-blue bg-blue-50/50 border border-blue-100 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-zhihu-blue transition-all"
                   />
                   <span className="text-sm font-medium text-slate-500">人</span>
                 </div>
               </div>
-              <input 
-                type="range" min="1" max="1000000" step="5000"
+              <input
+                type="range" min="1" max="10000" step="50"
                 value={config.followersPages}
                 onChange={(e) => onConfigChange({ ...config, followersPages: parseInt(e.target.value) })}
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-zhihu-blue"

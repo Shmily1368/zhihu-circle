@@ -15,6 +15,7 @@ import { sanitizeUser, sanitizeUsers } from "@/lib/zhihu/sanitize";
 
 export default function GeneratingPage() {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isLlmGenerating, setIsLlmGenerating] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [requireAuth, setRequireAuth] = useState(false);
@@ -77,9 +78,25 @@ export default function GeneratingPage() {
 
   const handleOpenShare = () => {
     if (graphRef.current) {
-      setGraphSnapshot(graphRef.current.getDataURL());
+      // 1. 重置图谱的缩放和拖拽偏移，使其居中
+      graphRef.current.resetTransform();
+
+      // 2. 等待重置动画完成后再截图，确保居中完美
+      setTimeout(() => {
+        // 首次打开时，默认是不隐藏名字的截图
+        setGraphSnapshot(graphRef.current!.getDataURL(false));
+        setIsShareModalOpen(true);
+      }, 300);
+    } else {
+      setIsShareModalOpen(true);
     }
-    setIsShareModalOpen(true);
+  };
+
+  const handleHideNamesChange = (hide: boolean) => {
+    if (graphRef.current) {
+      // 重新生成带/不带名字的截图并更新状态
+      setGraphSnapshot(graphRef.current.getDataURL(hide));
+    }
   };
 
   const fetchProxy = async (path: string, params?: any) => {
@@ -158,7 +175,12 @@ export default function GeneratingPage() {
       // 4. 核心修复：根据当前屏幕上的这批人，重新动态分配座位（圈层）
       // 这样新进来的高分用户才会一级一级把别人挤出去，而不是背景数据一变，屏幕上的人瞬间大洗牌
       // 即使 changed 为 false，如果 config 参数变了，我们也需要强制重排座位
-      newDisplayed.sort((a, b) => b.score - a.score);
+
+      // 添加微小的随机排序噪音，打破同分用户的固定排列，让换座看起来更生动
+      newDisplayed.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return String(a.uid).localeCompare(String(b.uid));
+      });
 
       let currentCircle = 1;
       let currentCount = 0;
@@ -255,6 +277,10 @@ export default function GeneratingPage() {
     rawDataRef.current.followers = [];
     rawDataRef.current.moments = [];
 
+    // 清除上一次的 LLM 数据和选中的节点
+    setLlmData(null);
+    setSelectedNode(null);
+
     try {
       setStep(1); // 正在获取资料
       const meData = await fetchProxy('/user');
@@ -346,17 +372,29 @@ export default function GeneratingPage() {
       await Promise.all([fetchFollowed(), fetchFollowers()]);
 
       setStep(3); // 正在读取关注动态
-      const momentPromises = [];
-      for (let p = 0; p < 2; p++) {
-        momentPromises.push(fetchProxy('/user/moments', { page: p, per_page: 50 }).catch(() => []));
-      }
-      const momentsResults = await Promise.all(momentPromises);
-      for (const mRes of momentsResults) {
-        const items = Array.isArray(mRes) ? mRes : (mRes.data || []);
-        if (items.length > 0) {
-          rawDataRef.current.moments.push(...items);
+
+      // 修改为分步、小批量抓取动态并逐步更新图谱，营造真实的“一个一个挤进来”的平滑感
+      const fetchMoments = async () => {
+        const totalPages = 2; // 当前固定抓取两页动态
+        for (let p = 0; p < totalPages; p++) {
+          try {
+            const mRes = await fetchProxy('/user/moments', { page: p, per_page: 50 });
+            const items = Array.isArray(mRes) ? mRes : (mRes.data || []);
+            if (items.length > 0) {
+              // 每次只处理 3 条动态，并人为制造延迟，让动画引擎有时间平滑展示排名变化
+              for (let i = 0; i < items.length; i += 3) {
+                rawDataRef.current.moments.push(...items.slice(i, i + 3));
+                computeTargetData();
+                await new Promise(r => setTimeout(r, 500)); // 延迟 500ms，让图谱有足够时间渲染这一次的小洗牌
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to fetch moments page', p, e);
+          }
         }
-      }
+      };
+
+      await fetchMoments();
 
       setStep(4); // 正在生成 Circle
       computeTargetData(); // 最终数据计算
@@ -367,6 +405,7 @@ export default function GeneratingPage() {
 
       // 抓取完成，立刻触发 LLM 分析（无需等待动画播完）
       if (targetDataRef.current) {
+        setIsLlmGenerating(true);
         fetch('/api/circle/insights', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -378,7 +417,8 @@ export default function GeneratingPage() {
               setLlmData(llmRes.data);
             }
           })
-          .catch(e => console.warn('LLM analysis failed', e));
+          .catch(e => console.warn('LLM analysis failed', e))
+          .finally(() => setIsLlmGenerating(false));
       }
 
     } catch (err: any) {
@@ -388,23 +428,23 @@ export default function GeneratingPage() {
     }
   };
 
+  const getProgressStyle = () => {
+    if (!isGenerating && resultData) return { bg: 'bg-emerald-50/90', text: 'text-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500' };
+    if (step <= 1) return { bg: 'bg-blue-50/90', text: 'text-blue-600', border: 'border-blue-200', dot: 'bg-blue-500' };
+    if (step === 2) return { bg: 'bg-indigo-50/90', text: 'text-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500' };
+    if (step === 3) return { bg: 'bg-amber-50/90', text: 'text-amber-600', border: 'border-amber-200', dot: 'bg-amber-500' };
+    return { bg: 'bg-purple-50/90', text: 'text-purple-600', border: 'border-purple-200', dot: 'bg-purple-500' };
+  };
+
+  const pStyle = getProgressStyle();
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-      <div className="max-w-[1600px] mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">生成你的知乎信息宇宙</h1>
             <p className="text-slate-500 mt-1">基于关注关系与关注动态，看看谁正在塑造你的知乎视野</p>
-          </div>
-          <div className="flex gap-3">
-            {isGenerating && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-full text-sm font-medium animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span> 正在实时抓取 {GENERATE_STEPS[step]}
-              </div>
-            )}
-            {!isGenerating && resultData && (
-              <ShareCard onShare={handleOpenShare} />
-            )}
           </div>
         </header>
 
@@ -430,37 +470,62 @@ export default function GeneratingPage() {
           isGenerating={isGenerating}
         />
 
-        <div className="flex flex-col xl:flex-row gap-6">
-          <div className="flex-1 relative">
+        {/* 主内容区：左侧图谱，右侧洞察雷达并排 */}
+        <div className="flex flex-col xl:flex-row gap-6 items-stretch">
+          <div className="flex-1 relative min-w-0">
+            <div className="absolute top-6 right-6 z-20 flex flex-col items-end gap-3">
+              {(isGenerating || resultData) && (
+                <div className={`flex items-center gap-2 px-5 py-2.5 ${pStyle.bg} backdrop-blur ${pStyle.text} rounded-full text-sm font-bold ${isGenerating ? 'animate-pulse' : ''} shadow-md border ${pStyle.border} transition-colors duration-500`}>
+                  <span className={`w-2.5 h-2.5 rounded-full ${pStyle.dot}`}></span>
+                  {isGenerating ? `正在实时抓取 ${GENERATE_STEPS[step]}` : '图谱生成完毕'}
+                </div>
+              )}
+
+              {!isGenerating && resultData && (
+                <ShareCard onShare={handleOpenShare} />
+              )}
+            </div>
+
             {resultData ? (
               <CircleGraph ref={graphRef} data={resultData} onNodeClick={setSelectedNode} />
             ) : (
-              <div className="w-full h-[80vh] min-h-[800px] border border-slate-200 rounded-2xl bg-white shadow-sm flex items-center justify-center">
+              <div className="w-full h-[80vh] min-h-[750px] border border-slate-200 rounded-2xl bg-white shadow-sm flex items-center justify-center">
                 <div className="text-slate-400 font-medium">准备渲染宇宙...</div>
               </div>
             )}
           </div>
 
-          <div className="w-full xl:w-[400px] shrink-0 flex flex-col gap-6">
-            <TopicInsightCards data={resultData || { globalInsights: { totalFollowed: 0, totalFollowers: 0, mutualFollowCount: 0, totalMoments: 0, topActiveUsers: [] }, circles: { circle1: [], circle2: [], circle3: [] } } as any} llmInsight={llmData?.global_insight} />
-
-            <UserInsightPanel
-              user={selectedNode}
-              llmInsight={
-                selectedNode && 'uid' in selectedNode
-                  ? llmData?.users.find(u => u.uid === selectedNode.uid)
-                  : undefined
-              }
-            />
+          <div className="w-full xl:w-[360px] shrink-0">
+            <div className="h-[80vh] min-h-[750px] sticky top-6">
+              <UserInsightPanel
+                user={selectedNode}
+                llmInsight={
+                  selectedNode && 'uid' in selectedNode
+                    ? llmData?.users.find(u => u.uid === selectedNode.uid)
+                    : undefined
+                }
+                globalLlmInsight={llmData?.global_insight}
+                isLlmGenerating={isLlmGenerating}
+                onClose={() => setSelectedNode(null)}
+              />
+            </div>
           </div>
         </div>
+
+        {/* 底部洞察区域：全局洞察 */}
+        <TopicInsightCards
+          data={resultData || { globalInsights: { totalFollowed: 0, totalFollowers: 0, mutualFollowCount: 0, totalMoments: 0, topActiveUsers: [] }, circles: { circle1: [], circle2: [], circle3: [] } } as any}
+          llmInsight={llmData?.global_insight}
+          isLlmGenerating={isLlmGenerating}
+        />
       </div>
       {isShareModalOpen && resultData && (
         <ShareModal
+          onClose={() => setIsShareModalOpen(false)}
+          graphImage={graphSnapshot}
           data={resultData}
           llmInsight={llmData?.global_insight}
-          graphImage={graphSnapshot}
-          onClose={() => setIsShareModalOpen(false)}
+          onHideNamesChange={handleHideNamesChange}
         />
       )}
     </div>

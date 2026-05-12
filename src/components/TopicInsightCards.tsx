@@ -2,17 +2,24 @@
 
 import React from "react";
 import { ZhihuCircleResult, GlobalLLMInsight } from "../lib/zhihu/types";
-import { Users, UserPlus, Eye, MessageCircle, Sparkles, Lightbulb } from "lucide-react";
+import { Users, UserPlus, Eye, MessageCircle, Sparkles, Lightbulb, Loader2 } from "lucide-react";
 
-export default function TopicInsightCards({ data, llmInsight }: { data: ZhihuCircleResult, llmInsight?: GlobalLLMInsight }) {
+export default function TopicInsightCards({ data, llmInsight, isLlmGenerating }: { data: ZhihuCircleResult, llmInsight?: GlobalLLMInsight, isLlmGenerating?: boolean }) {
     const { globalInsights, circles } = data;
 
     return (
         <div className="space-y-4">
-            {llmInsight && (
+            {isLlmGenerating && !llmInsight && (
+                <div className="p-5 border border-indigo-100 rounded-2xl bg-indigo-50/50 shadow-sm mb-6 flex flex-col items-center justify-center min-h-[160px] gap-3">
+                    <Loader2 className="animate-spin text-indigo-500" size={32} />
+                    <p className="text-indigo-800 font-medium animate-pulse text-sm">正在呼叫 LLM 进行全局洞察分析...</p>
+                </div>
+            )}
+
+            {!isLlmGenerating && llmInsight && (
                 <div className="p-5 border border-indigo-100 rounded-2xl bg-indigo-50/50 shadow-sm mb-6">
                     <h3 className="font-bold text-lg text-indigo-900 mb-3 flex items-center gap-2">
-                        <Sparkles className="text-indigo-600" /> AI 全局洞察
+                        <Sparkles className="text-indigo-600" /> LLM 全局洞察
                     </h3>
                     <p className="text-indigo-800 font-medium mb-3">{llmInsight.summary}</p>
                     <div className="flex flex-col gap-4">

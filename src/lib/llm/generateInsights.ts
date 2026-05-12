@@ -1,5 +1,5 @@
-import { ZhihuCircleResult, LLMAnalysisResult } from "../zhihu/types";
-import { callLLM } from "./client";
+import { ZhihuCircleResult, LLMAnalysisResult, UserLLMInsight } from "../zhihu/types";
+import { callGlobalLLM, callSingleUserLLM } from "./client";
 
 export async function generateCircleInsights(circleData: ZhihuCircleResult): Promise<LLMAnalysisResult> {
     // 提取中心用户脱敏信息
@@ -9,9 +9,9 @@ export async function generateCircleInsights(circleData: ZhihuCircleResult): Pro
         description: circleData.center.description,
     };
 
-    // 提取 Top 用户 (C1前10, C2前10, C3前10)
-    const extractTopUsers = (users: any[], limit: number) => {
-        return users.slice(0, limit).map(u => ({
+    // 提取指定圈层的所有用户及其所有动态
+    const extractUsers = (users: any[]) => {
+        return users.map(u => ({
             uid: u.uid,
             fullname: u.fullname,
             headline: u.headline,
@@ -21,8 +21,8 @@ export async function generateCircleInsights(circleData: ZhihuCircleResult): Pro
             circle: u.circle,
             moment_actor_count: u.moment_actor_count,
             moment_author_count: u.moment_author_count,
-            // 截取最多 3 条 moments，并只保留核心信息
-            recent_moments: u.recent_moments?.slice(0, 3).map((m: any) => ({
+            // 提取所有 moments，保留核心信息
+            recent_moments: u.recent_moments?.map((m: any) => ({
                 action_text: m.action_text,
                 title: m.target?.title,
                 excerpt: m.target?.excerpt ? m.target.excerpt.substring(0, 50) + '...' : undefined,
@@ -30,13 +30,69 @@ export async function generateCircleInsights(circleData: ZhihuCircleResult): Pro
         }));
     };
 
-    const promptData = {
+    const circle1Users = extractUsers(circleData.circles.circle1 || []);
+    const circle2Users = extractUsers(circleData.circles.circle2 || []);
+    const allTargetUsers = [...circle1Users, ...circle2Users];
+
+    // 1. 发起全局分析请求 (不阻塞单用户分析)
+    const globalPromptData = {
         center_user: centerUser,
-        top_circle1_users: extractTopUsers(circleData.circles.circle1, 10),
-        top_circle2_users: extractTopUsers(circleData.circles.circle2, 10),
-        top_circle3_users: extractTopUsers(circleData.circles.circle3, 10),
+        top_active_users: allTargetUsers.slice(0, 10).map(u => ({
+            fullname: u.fullname,
+            headline: u.headline,
+            recent_moments: u.recent_moments
+        }))
+    };
+    
+    const globalInsightPromise = callGlobalLLM(globalPromptData).catch(e => {
+        console.error("Global LLM Error:", e);
+        return {
+            top_topics: ["生成失败"],
+            summary: "大模型全局分析生成失败或超时。",
+            breakout_advice: "无",
+            share_text: "探索我的知乎宇宙！"
+        };
+    });
+
+    // 2. 并发池处理单用户分析 (最大并发数为 8，兼顾速度和防限流)
+    const userInsights: UserLLMInsight[] = [];
+    const CONCURRENCY_LIMIT = 8;
+    let index = 0;
+
+    const worker = async () => {
+        while (index < allTargetUsers.length) {
+            const currentIndex = index++;
+            const u = allTargetUsers[currentIndex];
+            try {
+                const res = await callSingleUserLLM({
+                    center_user: centerUser,
+                    target_user: u
+                });
+                res.uid = u.uid; // 补全 uid 关联
+                userInsights.push(res);
+            } catch (e) {
+                console.error(`LLM Error for user ${u.uid}:`, e);
+                // 失败不中断其他任务，可以返回一个兜底对象
+                userInsights.push({
+                    uid: u.uid,
+                    tags: ["分析失败"],
+                    summary: "大模型调用失败或超时",
+                    circle_reason: [],
+                    relationship_type: "未知",
+                    confidence: "low"
+                });
+            }
+        }
     };
 
-    // 调用 LLM
-    return await callLLM(promptData);
+    // 启动并发 Worker
+    const workers = Array(Math.min(CONCURRENCY_LIMIT, allTargetUsers.length)).fill(0).map(() => worker());
+    await Promise.all(workers);
+
+    const globalInsight = await globalInsightPromise;
+
+    return {
+        global_insight: globalInsight,
+        users: userInsights
+    };
 }

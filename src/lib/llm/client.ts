@@ -1,7 +1,7 @@
-import { LLMAnalysisResult } from "../zhihu/types";
-import { LLM_SYSTEM_PROMPT } from "./prompts";
+import { GlobalLLMInsight, UserLLMInsight } from "../zhihu/types";
+import { LLM_GLOBAL_PROMPT, LLM_USER_PROMPT } from "./prompts";
 
-export async function callLLM(promptData: any): Promise<LLMAnalysisResult> {
+async function baseCallLLM(systemPrompt: string, promptData: any) {
     const apiKey = process.env.LLM_API_KEY;
     const baseUrl = process.env.LLM_BASE_URL || 'https://api.openai.com/v1';
     const model = process.env.LLM_MODEL || 'gpt-3.5-turbo';
@@ -20,7 +20,7 @@ export async function callLLM(promptData: any): Promise<LLMAnalysisResult> {
         body: JSON.stringify({
             model: model,
             messages: [
-                { role: 'system', content: LLM_SYSTEM_PROMPT },
+                { role: 'system', content: systemPrompt },
                 { role: 'user', content: JSON.stringify(promptData) }
             ],
             response_format: { type: "json_object" },
@@ -40,5 +40,13 @@ export async function callLLM(promptData: any): Promise<LLMAnalysisResult> {
         throw new Error('Empty response from LLM');
     }
 
-    return JSON.parse(content) as LLMAnalysisResult;
+    return JSON.parse(content);
+}
+
+export async function callGlobalLLM(promptData: any): Promise<GlobalLLMInsight> {
+    return await baseCallLLM(LLM_GLOBAL_PROMPT, promptData) as GlobalLLMInsight;
+}
+
+export async function callSingleUserLLM(promptData: any): Promise<UserLLMInsight> {
+    return await baseCallLLM(LLM_USER_PROMPT, promptData) as UserLLMInsight;
 }

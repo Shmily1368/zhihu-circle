@@ -36,7 +36,7 @@ export default function Home() {
                         <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center mb-4">
                             <BrainCircuit className="text-purple-600" size={20} />
                         </div>
-                        <h3 className="font-bold text-slate-800 mb-2">AI 深度洞察</h3>
+                        <h3 className="font-bold text-slate-800 mb-2">LLM 深度洞察</h3>
                         <p className="text-sm text-slate-500 leading-relaxed">接入 Kimi 大模型，智能总结你的信息流偏好，并为你提供人物标签与破圈关注建议。</p>
                     </div>
                     <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
