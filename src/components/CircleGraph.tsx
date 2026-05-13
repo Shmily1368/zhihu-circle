@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useRef, useEffect, forwardRef, useImperativeHandle } from "react";
+import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState } from "react";
 import * as echarts from "echarts";
 import { ZhihuCircleResult, CircleUser } from "../lib/zhihu/types";
 
 import { ZoomIn, ZoomOut, Maximize } from "lucide-react";
+
+const circularImageCache: Record<string, string> = {};
 
 export interface CircleGraphRef {
   getDataURL: (hideNames?: boolean) => string | null;
@@ -19,6 +21,7 @@ interface Props {
 const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, ref) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const myChartInstance = useRef<echarts.ECharts | null>(null);
+  const [tick, setTick] = useState(0);
 
   const generateOption = (chartData: ZhihuCircleResult, withAnimation: boolean, theme: 'light' | 'dark' = 'light', hideNames: boolean = false): echarts.EChartsCoreOption => {
     const isDark = theme === 'dark';
@@ -31,8 +34,38 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
     const nodes: any[] = [];
     const edges: any[] = [];
 
-    //代理 URL，防止 Canvas 污染
-    const getProxyUrl = (url: string | undefined) => url ? `/api/image-proxy?url=${encodeURIComponent(url)}` : '';
+    // 将方形头像转换为透明底的圆形 Base64，解决 ECharts rich text 无法裁剪图片的问题
+    const getAvatarUrl = (url: string | undefined) => {
+      if (!url) return '';
+      const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(url)}`;
+      if (circularImageCache[proxyUrl] && circularImageCache[proxyUrl] !== 'loading') {
+        return circularImageCache[proxyUrl];
+      }
+      if (circularImageCache[proxyUrl] === 'loading') return proxyUrl;
+
+      circularImageCache[proxyUrl] = 'loading';
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = 256;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.beginPath();
+          ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+          ctx.clip();
+          const minSide = Math.min(img.width, img.height);
+          ctx.drawImage(img, (img.width - minSide) / 2, (img.height - minSide) / 2, minSide, minSide, 0, 0, size, size);
+          circularImageCache[proxyUrl] = canvas.toDataURL('image/png');
+          setTick(t => t + 1); // 图片裁剪完成后触发 ECharts 重绘
+        }
+      };
+      img.onerror = () => { circularImageCache[proxyUrl] = proxyUrl; };
+      img.src = proxyUrl;
+      return proxyUrl;
+    };
 
     // 获取数据真实圈数
     const dataCircleKeys = Object.keys(chartData.circles).sort(); // circle1, circle2...
@@ -59,7 +92,7 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
         ].join('\n'),
         rich: {
           avatar: {
-            backgroundColor: { image: getProxyUrl(chartData.center.avatar_path) },
+            backgroundColor: { image: getAvatarUrl(chartData.center.avatar_path) },
             width: centerSize,
             height: centerSize,
             borderRadius: centerSize / 2,
@@ -137,7 +170,7 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
             ].join('\n'),
             rich: {
               avatar: {
-                backgroundColor: { image: getProxyUrl(user.avatar_path) },
+                backgroundColor: { image: getAvatarUrl(user.avatar_path) },
                 width: size * 1.2,
                 height: size * 1.2,
                 borderRadius: size * 0.6,
@@ -306,7 +339,7 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
       }
     });
 
-  }, [data, onNodeClick]);
+  }, [data, onNodeClick, tick]);
 
   const handleZoom = (zoomRatio: number) => {
     if (myChartInstance.current) {
