@@ -4,6 +4,8 @@ import React, { useRef, useEffect, forwardRef, useImperativeHandle } from "react
 import * as echarts from "echarts";
 import { ZhihuCircleResult, CircleUser } from "../lib/zhihu/types";
 
+import { ZoomIn, ZoomOut, Maximize } from "lucide-react";
+
 export interface CircleGraphRef {
   getDataURL: (hideNames?: boolean) => string | null;
   resetTransform: () => void;
@@ -211,6 +213,34 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
     };
   };
 
+  const resetTransform = () => {
+    if (myChartInstance.current && chartRef.current && data) {
+      // 1. 完全销毁旧实例以清除 roam 状态 (拖拽和缩放)
+      myChartInstance.current.dispose();
+
+      // 2. 重新初始化
+      myChartInstance.current = echarts.init(chartRef.current);
+      const myChart = myChartInstance.current;
+
+      // 3. 用无动画模式瞬间渲染最新的数据状态
+      const option = generateOption(data, false);
+      myChart.setOption(option, true);
+
+      // 4. 重新绑定点击事件
+      myChart.on("click", (params: any) => {
+        if (params.dataType === "node" && onNodeClick && params.data && params.data.userData) {
+          onNodeClick(params.data.userData);
+        }
+      });
+
+      myChart.getZr().on("click", (params: any) => {
+        if (!params.target && onNodeClick) {
+          onNodeClick(null);
+        }
+      });
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     getDataURL: (hideNames: boolean = false) => {
       if (myChartInstance.current && data) {
@@ -232,27 +262,7 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
       }
       return null;
     },
-    resetTransform: () => {
-      if (myChartInstance.current && chartRef.current && data) {
-        // 1. 完全销毁旧实例以清除 roam 状态 (拖拽和缩放)
-        myChartInstance.current.dispose();
-
-        // 2. 重新初始化
-        myChartInstance.current = echarts.init(chartRef.current);
-        const myChart = myChartInstance.current;
-
-        // 3. 用无动画模式瞬间渲染最新的数据状态
-        const option = generateOption(data, false);
-        myChart.setOption(option, true);
-
-        // 4. 重新绑定点击事件
-        myChart.on("click", (params: any) => {
-          if (params.dataType === "node" && onNodeClick && params.data && params.data.userData) {
-            onNodeClick(params.data.userData);
-          }
-        });
-      }
-    }
+    resetTransform
   }), [data, onNodeClick]);
 
   useEffect(() => {
@@ -298,7 +308,52 @@ const CircleGraph = forwardRef<CircleGraphRef, Props>(({ data, onNodeClick }, re
 
   }, [data, onNodeClick]);
 
-  return <div ref={chartRef} className="w-full h-[80vh] min-h-[750px] border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden" />;
+  const handleZoom = (zoomRatio: number) => {
+    if (myChartInstance.current) {
+      // 获取当前缩放级别，计算出新的相对缩放值
+      const currentOption = myChartInstance.current.getOption() as any;
+      const currentZoom = currentOption.series[0]?.zoom || 1;
+
+      // 使用 setOption 更新 series 中的 zoom 属性，实现原地缩放
+      myChartInstance.current.setOption({
+        series: [{
+          zoom: currentZoom * zoomRatio
+        }]
+      });
+    }
+  };
+
+  return (
+    <div className="relative w-full h-[80vh] min-h-[750px] border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden">
+      <div ref={chartRef} className="w-full h-full" />
+
+      {/* 缩放控制工具栏 */}
+      <div className="absolute bottom-6 right-6 flex flex-col gap-2 bg-white/90 backdrop-blur border border-slate-200 p-1.5 rounded-xl shadow-sm z-10">
+        <button
+          onClick={() => handleZoom(1.2)}
+          className="p-2 text-slate-500 hover:text-zhihu-blue hover:bg-blue-50 rounded-lg transition-colors"
+          title="放大"
+        >
+          <ZoomIn size={20} />
+        </button>
+        <button
+          onClick={() => handleZoom(0.8)}
+          className="p-2 text-slate-500 hover:text-zhihu-blue hover:bg-blue-50 rounded-lg transition-colors"
+          title="缩小"
+        >
+          <ZoomOut size={20} />
+        </button>
+        <div className="w-full h-px bg-slate-200 my-0.5"></div>
+        <button
+          onClick={resetTransform}
+          className="p-2 text-slate-500 hover:text-zhihu-blue hover:bg-blue-50 rounded-lg transition-colors"
+          title="恢复默认大小与位置"
+        >
+          <Maximize size={20} />
+        </button>
+      </div>
+    </div>
+  );
 });
 
 export default CircleGraph;
