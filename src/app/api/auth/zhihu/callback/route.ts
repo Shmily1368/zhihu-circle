@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const tokenUrl = 'https://openapi.zhihu.com/access_token';
+        // 如果配置了代理，优先使用代理地址请求知乎接口，解决 Vercel IP 被屏蔽导致的 Connect Timeout
+        const tokenUrl = process.env.ZHIHU_OAUTH_PROXY_URL || 'https://openapi.zhihu.com/access_token';
         const formData = new URLSearchParams();
         formData.append('app_id', appId);
         formData.append('app_key', appKey);
@@ -36,11 +37,24 @@ export async function GET(request: NextRequest) {
         formData.append('redirect_uri', redirectUri);
         formData.append('code', code);
 
+        // 如果配置了代理，可能需要添加额外的头信息（例如标识原域名）
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        };
+        
+        // 允许通过环境变量注入代理所需的额外 Header（JSON 格式字符串）
+        if (process.env.ZHIHU_OAUTH_PROXY_HEADERS) {
+            try {
+                const proxyHeaders = JSON.parse(process.env.ZHIHU_OAUTH_PROXY_HEADERS);
+                Object.assign(headers, proxyHeaders);
+            } catch (e) {
+                console.error('Failed to parse ZHIHU_OAUTH_PROXY_HEADERS:', e);
+            }
+        }
+
         const tokenResponse = await fetch(tokenUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
+            headers,
             body: formData.toString(),
         });
 
